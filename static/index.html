@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ophtho AI Scribe</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: #1a1d2e;
+    border-bottom: 1px solid #2a2d3e;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { font-size: 1.2rem; font-weight: 600; color: #fff; }
+  header span { font-size: 0.85rem; color: #888; }
+
+  #status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #444;
+    transition: background 0.3s;
+  }
+  #status-dot.recording { background: #e53935; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: 0;
+  }
+
+  /* ── LEFT PANEL ── */
+  .left-panel {
+    display: flex;
+    flex-direction: column;
+    width: 55%;
+    border-right: 1px solid #2a2d3e;
+    padding: 20px;
+    gap: 14px;
+    overflow: hidden;
+  }
+
+  .controls { display: flex; gap: 10px; }
+
+  button {
+    padding: 9px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:hover:not(:disabled) { opacity: 0.85; }
+
+  #btn-start  { background: #2e7d32; color: #fff; }
+  #btn-stop   { background: #c62828; color: #fff; }
+  #btn-clear  { background: #333; color: #ccc; }
+  #btn-soap   { background: #1565c0; color: #fff; }
+
+  #status-text {
+    font-size: 0.82rem;
+    color: #888;
+    padding: 4px 0;
+  }
+
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #2a2d3e;
+    margin-bottom: 4px;
+  }
+  .tab {
+    padding: 7px 18px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #666;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .tab.active { color: #64b5f6; border-bottom-color: #64b5f6; }
+
+  #paste-panel {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    gap: 10px;
+    overflow: hidden;
+  }
+  #paste-panel.visible { display: flex; }
+
+  #mic-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  #paste-input {
+    flex: 1;
+    background: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 8px;
+    padding: 14px;
+    color: #ccc;
+    font-size: 0.92rem;
+    line-height: 1.7;
+    resize: none;
+    font-family: inherit;
+  }
+  #paste-input:focus { outline: none; border-color: #3a5f8a; }
+  #paste-input::placeholder { color: #444; }
+  #btn-analyze { background: #6a1b9a; color: #fff; align-self: flex-start; }
+  #analyze-status { font-size: 0.82rem; color: #888; }
+
+  .section-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: #666;
+    text-transform: uppercase;
+  }
+
+  #transcript-box {
+    flex: 1;
+    background: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 8px;
+    padding: 14px;
+    overflow-y: auto;
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: #ccc;
+    white-space: pre-wrap;
+  }
+  #transcript-box .empty { color: #555; font-style: italic; }
+
+  /* ── RIGHT PANEL ── */
+  .right-panel {
+    width: 45%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 20px;
+    gap: 14px;
+  }
+
+  .right-panel .top-half,
+  .right-panel .bottom-half {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  .right-panel .top-half { border-bottom: 1px solid #2a2d3e; padding-bottom: 14px; }
+
+  .scroll-area {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .code-card {
+    background: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .code-card .info { flex: 1; }
+  .code-card .icd-code { font-weight: 700; color: #64b5f6; font-size: 0.95rem; }
+  .code-card .icd-desc { font-size: 0.85rem; color: #bbb; margin: 2px 0 6px; }
+  .code-card .cpt-line { font-size: 0.78rem; color: #777; display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+  .code-card .cpt-line span { color: #90caf9; font-weight: 600; }
+  .cpt-checkbox { accent-color: #64b5f6; width: 13px; height: 13px; cursor: pointer; flex-shrink: 0; }
+  .cpt-label { cursor: pointer; }
+
+  .btn-accept {
+    background: #1b5e20;
+    color: #a5d6a7;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    border-radius: 5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .btn-accepted {
+    background: transparent;
+    color: #4caf50;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    border-radius: 5px;
+    border: 1px solid #2e7d32;
+    cursor: default;
+  }
+  .btn-remove {
+    background: transparent;
+    color: #ef9a9a;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    border-radius: 5px;
+    border: 1px solid #c62828;
+  }
+
+  .empty-hint { color: #555; font-size: 0.85rem; font-style: italic; }
+
+  /* ── SOAP modal ── */
+  #soap-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  #soap-modal.open { display: flex; }
+  .modal-box {
+    background: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 10px;
+    width: 700px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    gap: 14px;
+  }
+  .modal-box h2 { font-size: 1.1rem; color: #fff; }
+  #soap-content {
+    flex: 1;
+    overflow-y: auto;
+    background: #0f1117;
+    border-radius: 6px;
+    padding: 14px;
+    font-size: 0.88rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    color: #ccc;
+  }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  #btn-download { background: #1565c0; color: #fff; }
+  #btn-close-modal { background: #333; color: #ccc; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="status-dot"></div>
+  <h1>👁️ Ophthalmology AI Scribe</h1>
+  <span>Real-time ICD-10 &amp; CPT coding assistant</span>
+</header>
+
+<div class="main">
+
+  <!-- LEFT: controls + transcript -->
+  <div class="left-panel">
+    <div class="controls">
+      <button id="btn-start">▶ Start Visit</button>
+      <button id="btn-stop" disabled>⏹ End Visit</button>
+      <button id="btn-clear">🗑 Clear</button>
+      <button id="btn-soap" disabled>📝 SOAP Note</button>
+    </div>
+    <div id="status-text">Visit not started</div>
+
+    <div class="tab-bar">
+      <div class="tab active" id="tab-mic" onclick="switchTab('mic')">🎙 Live Mic</div>
+      <div class="tab" id="tab-paste" onclick="switchTab('paste')">📋 Paste Transcript</div>
+    </div>
+
+    <!-- Mic tab -->
+    <div id="mic-panel">
+      <div class="section-label">Live Transcript</div>
+      <div id="transcript-box"><span class="empty">Transcript will appear here once the visit starts…</span></div>
+    </div>
+
+    <!-- Paste tab -->
+    <div id="paste-panel">
+      <div class="section-label">Paste a patient-doctor conversation</div>
+      <textarea id="paste-input" placeholder="Doctor: What brings you in today?&#10;Patient: I've been having blurry vision in my right eye and some floaters…&#10;Doctor: Any pain? Let me check your pressure…"></textarea>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button id="btn-analyze">🔍 Analyze Transcript</button>
+        <div id="analyze-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: suggestions + accepted -->
+  <div class="right-panel">
+    <div class="top-half">
+      <div class="section-label">ICD-10 Suggestions</div>
+      <div class="scroll-area" id="suggestions-list">
+        <div class="empty-hint">Suggestions will appear as the conversation progresses…</div>
+      </div>
+    </div>
+    <div class="bottom-half">
+      <div class="section-label">Accepted Codes</div>
+      <div class="scroll-area" id="accepted-list">
+        <div class="empty-hint">No codes accepted yet.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SOAP modal -->
+<div id="soap-modal">
+  <div class="modal-box">
+    <h2>📋 SOAP Note</h2>
+    <div id="soap-content">Generating…</div>
+    <div class="modal-actions">
+      <button id="btn-download">⬇ Download</button>
+      <button id="btn-close-modal">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let recording = false;
+  let transcriptText = "";
+  let suggestions = [];
+  let acceptedCodes = [];
+  let selectedCpts = {};
+  let ws = null;
+
+  // ── Browser mic state ──────────────────────────────────────────────────────
+  let audioContext = null;
+  let mediaStream = null;
+  let processorNode = null;
+  let audioBuffer = [];
+  const CHUNK_SECONDS = 5;
+  const SAMPLE_RATE = 16000;
+
+  // ── Elements ───────────────────────────────────────────────────────────────
+  const btnStart   = document.getElementById("btn-start");
+  const btnStop    = document.getElementById("btn-stop");
+  const btnClear   = document.getElementById("btn-clear");
+  const btnSoap    = document.getElementById("btn-soap");
+  const statusDot  = document.getElementById("status-dot");
+  const statusText = document.getElementById("status-text");
+  const txBox      = document.getElementById("transcript-box");
+  const sugList    = document.getElementById("suggestions-list");
+  const accList    = document.getElementById("accepted-list");
+  const soapModal  = document.getElementById("soap-modal");
+  const soapContent= document.getElementById("soap-content");
+  const btnDownload= document.getElementById("btn-download");
+  const btnCloseM  = document.getElementById("btn-close-modal");
+
+  // ── WebSocket ──────────────────────────────────────────────────────────────
+  function connectWS() {
+    ws = new WebSocket(`ws://${location.host}/ws`);
+
+    ws.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === "update") {
+        if (msg.transcript_segments?.length) {
+          msg.transcript_segments.forEach(seg => {
+            transcriptText += (transcriptText ? " " : "") + seg;
+          });
+          renderTranscript();
+        }
+        if (msg.suggestions?.length) {
+          msg.suggestions.forEach(s => {
+            if (!suggestions.find(x => x.icd_code === s.icd_code)) {
+              suggestions.push(s);
+            }
+          });
+          renderSuggestions();
+        }
+      }
+      // update recording state from heartbeat too
+      if (msg.recording !== undefined) {
+        recording = msg.recording;
+        updateUI();
+      }
+    };
+
+    ws.onclose = () => {
+      setTimeout(connectWS, 2000); // auto-reconnect
+    };
+  }
+
+  connectWS();
+
+  // ── API calls ──────────────────────────────────────────────────────────────
+  async function apiPost(path, body = {}) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  }
+
+  btnStart.addEventListener("click", async () => {
+    await apiPost("/api/start");
+    await startBrowserMic();
+    recording = true;
+    updateUI();
+  });
+
+  btnStop.addEventListener("click", async () => {
+    stopBrowserMic();
+    await apiPost("/api/stop");
+    recording = false;
+    updateUI();
+  });
+
+  // ── Browser mic capture ────────────────────────────────────────────────────
+  async function startBrowserMic() {
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(mediaStream);
+
+      processorNode = audioContext.createScriptProcessor(8192, 1, 1);
+      processorNode.onaudioprocess = (e) => {
+        if (!recording) return;
+        // Resample to 16kHz if needed
+        const inputSamples = e.inputBuffer.getChannelData(0);
+        const ratio = e.inputBuffer.sampleRate / SAMPLE_RATE;
+        const outLen = Math.floor(inputSamples.length / ratio);
+        const resampled = new Float32Array(outLen);
+        for (let i = 0; i < outLen; i++) {
+          resampled[i] = inputSamples[Math.floor(i * ratio)];
+        }
+        for (let s of resampled) audioBuffer.push(s);
+
+        const chunkSize = SAMPLE_RATE * CHUNK_SECONDS;
+        if (audioBuffer.length >= chunkSize) {
+          const chunk = new Float32Array(audioBuffer.splice(0, chunkSize));
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            console.log(`[mic] sending ${chunk.length} samples`);
+            ws.send(chunk.buffer);
+          }
+        }
+      };
+
+      source.connect(processorNode);
+      processorNode.connect(audioContext.destination);
+      console.log("[mic] started, sample rate:", audioContext.sampleRate);
+    } catch (err) {
+      statusText.textContent = "⚠ Mic error: " + err.message;
+      console.error("[mic] error:", err);
+    }
+  }
+
+  function stopBrowserMic() {
+    if (processorNode) { processorNode.disconnect(); processorNode = null; }
+    if (audioContext) { audioContext.close(); audioContext = null; }
+    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+    audioBuffer = [];
+    console.log("[mic] stopped");
+  }
+
+  btnClear.addEventListener("click", async () => {
+    await apiPost("/api/clear");
+    transcriptText = "";
+    suggestions = [];
+    acceptedCodes = [];
+    renderTranscript();
+    renderSuggestions();
+    renderAccepted();
+    recording = false;
+    updateUI();
+  });
+
+  btnSoap.addEventListener("click", async () => {
+    soapModal.classList.add("open");
+    soapContent.textContent = "Generating SOAP note with DeepSeek… this may take 20-30 seconds.";
+    const data = await apiPost("/api/soap");
+    soapContent.textContent = data.soap_note || "Error generating note.";
+  });
+
+  btnDownload.addEventListener("click", () => {
+    const blob = new Blob([soapContent.textContent], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "soap_note.txt";
+    a.click();
+  });
+
+  btnCloseM.addEventListener("click", () => soapModal.classList.remove("open"));
+
+  // ── Accept / Remove ────────────────────────────────────────────────────────
+  async function acceptCode(icd_code) {
+    const suggestion = suggestions.find(s => s.icd_code === icd_code);
+    if (!suggestion) return;
+
+    // Filter CPT codes to only selected ones (default all selected if none chosen)
+    const selected = selectedCpts[icd_code];
+    const filteredCpts = selected && selected.size > 0
+      ? suggestion.cpt_codes.filter(c => selected.has(c.code))
+      : suggestion.cpt_codes;
+
+    const data = await apiPost("/api/accept_code", { icd_code, selected_cpts: filteredCpts });
+    acceptedCodes = data.accepted;
+    renderSuggestions();
+    renderAccepted();
+  }
+
+  function toggleCpt(icd_code, cpt_code) {
+    if (!selectedCpts[icd_code]) {
+      // First toggle — initialize with all codes selected, then remove this one
+      const suggestion = suggestions.find(s => s.icd_code === icd_code);
+      selectedCpts[icd_code] = new Set(suggestion.cpt_codes.map(c => c.code));
+    }
+    if (selectedCpts[icd_code].has(cpt_code)) {
+      selectedCpts[icd_code].delete(cpt_code);
+    } else {
+      selectedCpts[icd_code].add(cpt_code);
+    }
+    renderSuggestions();
+  }
+
+  async function removeCode(icd_code) {
+    const data = await apiPost("/api/remove_code", { icd_code });
+    acceptedCodes = data.accepted;
+    delete selectedCpts[icd_code];
+    renderAccepted();
+    renderSuggestions();
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  function renderTranscript() {
+    if (!transcriptText) {
+      txBox.innerHTML = '<span class="empty">Transcript will appear here once the visit starts…</span>';
+    } else {
+      txBox.textContent = transcriptText;
+      txBox.scrollTop = txBox.scrollHeight;
+    }
+  }
+
+  function renderSuggestions() {
+    if (!suggestions.length) {
+      sugList.innerHTML = '<div class="empty-hint">Suggestions will appear as the conversation progresses…</div>';
+      return;
+    }
+    sugList.innerHTML = suggestions.map(s => {
+      const isAccepted = acceptedCodes.some(a => a.icd_code === s.icd_code);
+      const selected = selectedCpts[s.icd_code];
+
+      const cptLines = s.cpt_codes.map(c => {
+        // Default: all checked unless user explicitly unchecked
+        const isChecked = !selected || selected.has(c.code);
+        const disabledAttr = isAccepted ? "disabled" : "";
+        return `<div class="cpt-line">
+          <input type="checkbox" class="cpt-checkbox" ${isChecked ? "checked" : ""} ${disabledAttr}
+            onchange="toggleCpt('${s.icd_code}', '${c.code}')" id="cpt_${s.icd_code}_${c.code}">
+          <label class="cpt-label" for="cpt_${s.icd_code}_${c.code}">
+            CPT <span>${c.code}</span> — ${c.description}
+          </label>
+        </div>`;
+      }).join("");
+
+      const actionBtn = isAccepted
+        ? `<button class="btn-accepted" disabled>✓ Added</button>`
+        : `<button class="btn-accept" onclick="acceptCode('${s.icd_code}')">Accept</button>`;
+
+      return `
+        <div class="code-card">
+          <div class="info">
+            <div class="icd-code">${s.icd_code}</div>
+            <div class="icd-desc">${s.icd_description}</div>
+            ${cptLines}
+          </div>
+          ${actionBtn}
+        </div>`;
+    }).join("");
+  }
+
+  function renderAccepted() {
+    if (!acceptedCodes.length) {
+      accList.innerHTML = '<div class="empty-hint">No codes accepted yet.</div>';
+      return;
+    }
+    accList.innerHTML = acceptedCodes.map(a => {
+      const cptLines = a.cpt_codes.map(c =>
+        `<div class="cpt-line">↳ CPT <span>${c.code}</span> — ${c.description}</div>`
+      ).join("");
+      return `
+        <div class="code-card">
+          <div class="info">
+            <div class="icd-code">✅ ${a.icd_code}</div>
+            <div class="icd-desc">${a.icd_description}</div>
+            ${cptLines}
+          </div>
+          <button class="btn-remove" onclick="removeCode('${a.icd_code}')">Remove</button>
+        </div>`;
+    }).join("");
+  }
+
+  function updateUI() {
+    btnStart.disabled  = recording;
+    btnStop.disabled   = !recording;
+    btnSoap.disabled   = recording || !transcriptText;
+    statusDot.className = recording ? "recording" : "";
+    statusText.textContent = recording ? "🔴 Recording in progress…" : "⚪ Visit not started";
+  }
+
+  updateUI();
+
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    document.getElementById("tab-mic").classList.toggle("active", tab === "mic");
+    document.getElementById("tab-paste").classList.toggle("active", tab === "paste");
+    document.getElementById("mic-panel").style.display = tab === "mic" ? "flex" : "none";
+    document.getElementById("paste-panel").classList.toggle("visible", tab === "paste");
+    // hide/show mic controls
+    btnStart.style.display = tab === "mic" ? "" : "none";
+    btnStop.style.display  = tab === "mic" ? "" : "none";
+  }
+
+  // ── Analyze pasted transcript ──────────────────────────────────────────────
+  document.getElementById("btn-analyze").addEventListener("click", async () => {
+    const text = document.getElementById("paste-input").value.trim();
+    if (!text) return;
+
+    const statusEl = document.getElementById("analyze-status");
+    const btnAnalyze = document.getElementById("btn-analyze");
+    btnAnalyze.disabled = true;
+    statusEl.textContent = "Analyzing with DeepSeek…";
+
+    try {
+      const data = await apiPost("/api/analyze_text", { text });
+      if (data.suggestions?.length) {
+        data.suggestions.forEach(s => {
+          if (!suggestions.find(x => x.icd_code === s.icd_code)) {
+            suggestions.push(s);
+          }
+        });
+        renderSuggestions();
+        statusEl.textContent = `✓ Found ${data.suggestions.length} new suggestion(s)`;
+      } else {
+        statusEl.textContent = "No new suggestions found.";
+      }
+      // also update transcript display
+      transcriptText = document.getElementById("paste-input").value;
+      btnSoap.disabled = false;
+    } catch(e) {
+      statusEl.textContent = "Error: " + e.message;
+    } finally {
+      btnAnalyze.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

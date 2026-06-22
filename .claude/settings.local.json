@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"/Users/anshulagarwal/MIT Dropbox/Anshul Agarwal/Recruitement Drive/opthalmology/audio\" \"/Users/anshulagarwal/MIT Dropbox/Anshul Agarwal/Recruitement Drive/opthalmology/llm\" \"/Users/anshulagarwal/MIT Dropbox/Anshul Agarwal/Recruitement Drive/opthalmology/db\" \"/Users/anshulagarwal/MIT Dropbox/Anshul Agarwal/Recruitement Drive/opthalmology/soap\" \"/Users/anshulagarwal/MIT Dropbox/Anshul Agarwal/Recruitement Drive/opthalmology/data\")"
+    ],
+    "additionalDirectories": [
+      "/Users/anshulagarwal/MIT Dropbox/Anshul Agarwal/Recruitement Drive/opthalmology"
+    ]
+  }
+}
