@@ -1,0 +1,7 @@
+
+# Ignore environment variable files
+.env
+.env.*
+
+# Ignore local envrc files
+.envrc
